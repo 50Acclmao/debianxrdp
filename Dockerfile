@@ -1,47 +1,30 @@
-FROM debian:bullseye
+FROM debian
 
-ENV DEBIAN_FRONTEND=noninteractive
+RUN dpkg --add-architecture i386 && \
+    apt update && \
+    DEBIAN_FRONTEND=noninteractive apt install -y \
+      wine qemu-kvm fonts-wqy-zenhei xz-utils dbus-x11 curl firefox-esr \
+      gnome-system-monitor mate-system-monitor git xfce4 xfce4-terminal \
+      tightvncserver wget && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN dpkg --add-architecture i386
+RUN wget https://github.com/novnc/noVNC/archive/refs/tags/v1.2.0.tar.gz && \
+    tar -xvf v1.2.0.tar.gz
 
-RUN apt update && apt install -y \
-    xrdp \
-    xfce4 \
-    xfce4-goodies \
-    xorg \
-    dbus-x11 \
-    sudo \
-    curl \
-    wget \
-    nano \
-    net-tools \
-    policykit-1 \
-    pulseaudio \
-    pulseaudio-utils \
-    wine \
-    wine32 \
-    firefox-esr && \
-    apt clean && rm -rf /var/lib/apt/lists/*
+RUN mkdir $HOME/.vnc && \
+    echo 'admin123@a' | vncpasswd -f > $HOME/.vnc/passwd && \
+    echo '/bin/env MOZ_FAKE_NO_SANDBOX=1 dbus-launch xfce4-session' > $HOME/.vnc/xstartup && \
+    chmod 600 $HOME/.vnc/passwd && \
+    chmod 755 $HOME/.vnc/xstartup
 
-# Set root password
-RUN echo "root:root" | chpasswd
+RUN { \
+      echo 'whoami'; \
+      echo 'cd'; \
+      echo "su -l -c 'vncserver :2000 -geometry 1360x768'"; \
+      echo 'cd /noVNC-1.2.0'; \
+      echo './utils/launch.sh --vnc localhost:7900 --listen 8900'; \
+    } >> /luo.sh && \
+    chmod 755 /luo.sh
 
-RUN sed -i 's/^allowed_users=.*/allowed_users=anybody/' /etc/X11/Xwrapper.config || echo "allowed_users=anybody" >> /etc/X11/Xwrapper.config
-
-RUN echo "startxfce4" > /root/.xsession && chmod 700 /root/.xsession
-
-# Generate machine-id for dbus
-RUN mkdir -p /var/run/dbus && dbus-uuidgen > /var/lib/dbus/machine-id
-
-RUN sed -i 's/crypt_level=high/crypt_level=low/' /etc/xrdp/xrdp.ini && \
-    sed -i 's/security_layer=negotiate/security_layer=rdp/' /etc/xrdp/xrdp.ini && \
-    echo "exec startxfce4" > /etc/xrdp/startwm.sh && chmod +x /etc/xrdp/startwm.sh
-
-RUN adduser xrdp ssl-cert
-
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
-
-EXPOSE 3389
-
-CMD ["/start.sh"]
+EXPOSE 8900
+CMD ["/luo.sh"]
