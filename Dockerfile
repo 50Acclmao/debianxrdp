@@ -1,30 +1,34 @@
-FROM debian
+FROM debian:bookworm
 
-RUN dpkg --add-architecture i386 && \
-    apt update && \
+RUN apt update && \
     DEBIAN_FRONTEND=noninteractive apt install -y \
-      wine qemu-kvm fonts-wqy-zenhei xz-utils dbus-x11 curl firefox-esr \
-      gnome-system-monitor mate-system-monitor git xfce4 xfce4-terminal \
-      tightvncserver wget && \
+      xrdp \
+      xfce4 \
+      xfce4-terminal \
+      dbus-x11 \
+      sudo \
+      wget \
+      curl \
+      git \
+      firefox-esr \
+      fonts-wqy-zenhei && \
     rm -rf /var/lib/apt/lists/*
 
-RUN wget https://github.com/novnc/noVNC/archive/refs/tags/v1.2.0.tar.gz && \
-    tar -xvf v1.2.0.tar.gz
+# create a user (change username/password here)
+RUN useradd -m -s /bin/bash rdpuser && \
+    echo "rdpuser:changeme123" | chpasswd && \
+    adduser rdpuser sudo && \
+    adduser xrdp ssl-cert
 
-RUN mkdir $HOME/.vnc && \
-    echo 'admin123@a' | vncpasswd -f > $HOME/.vnc/passwd && \
-    echo '/bin/env MOZ_FAKE_NO_SANDBOX=1 dbus-launch xfce4-session' > $HOME/.vnc/xstartup && \
-    chmod 600 $HOME/.vnc/passwd && \
-    chmod 755 $HOME/.vnc/xstartup
+# set xfce as the default desktop session for this user
+RUN echo "xfce4-session" > /home/rdpuser/.xsession && \
+    chown rdpuser:rdpuser /home/rdpuser/.xsession
 
-RUN { \
-      echo 'whoami'; \
-      echo 'cd'; \
-      echo "su -l -c 'vncserver :2000 -geometry 1360x768'"; \
-      echo 'cd /noVNC-1.2.0'; \
-      echo './utils/launch.sh --vnc localhost:7900 --listen 8900'; \
-    } >> /luo.sh && \
-    chmod 755 /luo.sh
+# xrdp needs its own startup script to launch xfce properly
+RUN echo '#!/bin/sh' > /etc/xrdp/startwm.sh && \
+    echo 'exec /bin/dbus-launch --exit-with-session xfce4-session' >> /etc/xrdp/startwm.sh && \
+    chmod +x /etc/xrdp/startwm.sh
 
-EXPOSE 8900
-CMD ["/luo.sh"]
+EXPOSE 3389
+
+CMD service xrdp start && tail -f /var/log/xrdp.log
